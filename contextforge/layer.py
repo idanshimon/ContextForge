@@ -36,6 +36,12 @@ class ContextForge:
         knowledge_dir: Directory to auto-ingest on init.
         db_path: SQLite database path for knowledge + sessions.
         max_context_tokens: Token budget for proactive knowledge loading.
+        min_score: BM25 relevance floor for retrieval. Defaults to ``0.0`` (no
+            floor — preserves the original "always return top-k" behavior). Set
+            a positive value so queries with no good match inject *nothing*
+            rather than near-irrelevant distractors. Recommended when CF is used
+            as a long-term memory layer, where later queries increasingly drift
+            away from what was stored.
         system_prompt: Base system prompt prepended to every request.
         llm_provider: Pre-built LLMProvider instance (overrides ``provider``).
     """
@@ -49,6 +55,7 @@ class ContextForge:
         knowledge_dir: Optional[str] = None,
         db_path: str = "./contextforge.db",
         max_context_tokens: int = 4096,
+        min_score: float = 0.0,
         system_prompt: str = (
             "You are a helpful assistant with access to a knowledge base. "
             "Answer using ONLY the information in the provided knowledge. "
@@ -80,6 +87,7 @@ class ContextForge:
             tree=self._tree,
             index=self._index,
             max_context_tokens=max_context_tokens,
+            min_score=min_score,
         )
 
         # -- Session store (shares the same DB) --

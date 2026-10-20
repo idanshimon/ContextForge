@@ -123,10 +123,21 @@ class MemoryIndex:
         query: str,
         top_k: int = 10,
         category: Optional[str] = None,
+        min_score: float = 0.0,
     ) -> list[SearchResult]:
         """Search the index using BM25 scoring.
 
         Returns the top-k results sorted by relevance score.
+
+        Args:
+            query: The search query.
+            top_k: Maximum number of results to return.
+            category: Optional category filter.
+            min_score: Minimum BM25 score a result must reach to be returned.
+                Defaults to ``0.0`` (no floor — return the full top-k). Set a
+                positive floor to drop weakly-matched documents so the caller
+                injects *nothing* rather than near-irrelevant distractors when
+                the corpus has no good match for the query.
         """
         terms = extract_keywords(query, top_k=15)
         if not terms:
@@ -162,6 +173,10 @@ class MemoryIndex:
 
         results = []
         for node_id, score in sorted(scores.items(), key=lambda x: -x[1])[:top_k]:
+            if score < min_score:
+                # Results are score-sorted; once we drop below the floor every
+                # remaining result is weaker, so we can stop here.
+                break
             info = entry_info[node_id]
             results.append(
                 SearchResult(

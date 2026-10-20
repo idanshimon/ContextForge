@@ -93,6 +93,47 @@ class TestSearch:
         assert len(results) == 1
 
 
+class TestMinScoreFloor:
+    """The min_score floor lets retrieval return *nothing* on a weak match,
+    rather than always filling top_k with near-irrelevant distractors. This is
+    the fix for the 'absence returns distractors' failure mode: when CF is a
+    long-term memory layer, queries drift away from what was stored, and a
+    top-k-with-no-floor retriever keeps injecting junk into the prompt.
+    """
+
+    def test_floor_zero_is_unchanged_default(self, populated_index: MemoryIndex):
+        # min_score=0.0 (the default) must be byte-identical to passing nothing.
+        a = populated_index.search("revenue million")
+        b = populated_index.search("revenue million", min_score=0.0)
+        assert [(r.path, round(r.score, 6)) for r in a] == [(r.path, round(r.score, 6)) for r in b]
+
+    def test_high_floor_drops_weak_matches(self, populated_index: MemoryIndex):
+        # A query that only weakly brushes a doc returns it with no floor...
+        unfloored = populated_index.search("revenue steady growth")
+        assert len(unfloored) >= 1
+        # ...but a floor above the weakest score drops the weak tail.
+        top_score = max(r.score for r in unfloored)
+        floored = populated_index.search("revenue steady growth", min_score=top_score)
+        # everything kept must clear the bar
+        assert all(r.score >= top_score for r in floored)
+        assert len(floored) <= len(unfloored)
+
+    def test_floor_above_everything_returns_empty(self, populated_index: MemoryIndex):
+        # A floor higher than any achievable score => inject nothing (the whole point).
+        results = populated_index.search("revenue", min_score=10_000.0)
+        assert results == []
+
+    def test_floor_keeps_strong_match(self, populated_index: MemoryIndex):
+        # A genuinely strong, on-topic query still returns its top hit under a
+        # modest floor — the floor drops distractors, not real answers.
+        baseline = populated_index.search("microservices architecture event-driven")
+        assert baseline and baseline[0].path == "engineering/arch"
+        floored = populated_index.search(
+            "microservices architecture event-driven", min_score=baseline[0].score * 0.5
+        )
+        assert floored and floored[0].path == "engineering/arch"
+
+
 class TestBuildFromTree:
     def test_build_from_tree(self):
         tree = KnowledgeTree(":memory:")

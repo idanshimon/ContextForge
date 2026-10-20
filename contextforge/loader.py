@@ -85,10 +85,12 @@ class ProactiveLoader:
         tree: KnowledgeTree,
         index: MemoryIndex,
         max_context_tokens: int = 4096,
+        min_score: float = 0.0,
     ) -> None:
         self._tree = tree
         self._index = index
         self._max_tokens = max_context_tokens
+        self._min_score = min_score
         self._cache: dict[str, _CacheEntry] = {}
         self._last_categories: list[str] = []
 
@@ -99,6 +101,14 @@ class ProactiveLoader:
     @max_context_tokens.setter
     def max_context_tokens(self, value: int) -> None:
         self._max_tokens = value
+
+    @property
+    def min_score(self) -> float:
+        return self._min_score
+
+    @min_score.setter
+    def min_score(self, value: float) -> None:
+        self._min_score = value
 
     def load(
         self,
@@ -133,6 +143,7 @@ class ProactiveLoader:
             query=combined,
             top_k=20,
             category=category_hint,
+            min_score=self._min_score,
         )
 
         if not results:
@@ -163,7 +174,7 @@ class ProactiveLoader:
         useful for synthesizing across knowledge domains.
         """
         combined = f"{query} {conversation_context}".strip()
-        results = self._index.search(query=combined, top_k=30)
+        results = self._index.search(query=combined, top_k=30, min_score=self._min_score)
 
         if not results:
             return []
